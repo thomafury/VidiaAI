@@ -1,0 +1,30 @@
+# Backend
+backend/venv/
+backend/__pycache__/
+backend/uploads/
+backend/frames/
+backend/metadata/
+backend/*.pyc
+
+# AI models
+*.pt
+*.pth
+*.bin
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/dist/
+
+# Environment
+.env
+**/.env
+
+# IDE
+.vscode/
+.idea/
+
+# Media
+*.mp4
+*.avi
+*.mov
