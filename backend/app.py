@@ -1,14 +1,22 @@
-from fastapi import FastAPI, UploadFile, File
+
+from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pathlib import Path
 import shutil
 import os
 import json
+import uuid
+import logging
 
 from extract_frames import extract_frames
 from ocr import run_ocr_on_frames
-from fastapi.middleware.cors import CORSMiddleware
 from speech_processor import transcribe_video
 
-app = FastAPI()
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("vidiaai")
+
+app = FastAPI(title="VidiaAI API")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -20,131 +28,159 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-UPLOAD_DIR = "uploads"
-FRAMES_DIR = "frames"
-META_DIR = "metadata"
+UPLOAD_DIR = Path("uploads")
+FRAMES_DIR = Path("frames")
+META_DIR = Path("metadata")
 
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-os.makedirs(FRAMES_DIR, exist_ok=True)
-os.makedirs(META_DIR, exist_ok=True)
+for directory in [UPLOAD_DIR, FRAMES_DIR, META_DIR]:
+    directory.mkdir(parents=True, exist_ok=True)
+
+
+@app.get("/")
+def home():
+    return {
+        "message": "VidiaAI API is running",
+        "status": "healthy"
+    }
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
 
 
 @app.post("/upload/")
-async def upload_video(file: UploadFile = File(...)):
+def upload_video(file: UploadFile = File(...)):
 
-    video_name = file.filename.split(".")[0]
-    video_path = f"uploads/{file.filename}"
+    video_id = str(uuid.uuid4())
+    extension = Path(file.filename or "video.mp4").suffix.lower()
 
-    with open(video_path, "wb") as buffer:
-        buffer.write(await file.read())
+    if extension not in [".mp4", ".mov", ".avi", ".mkv", ".webm"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported video format"
+        )
 
-    # 🎧 AUDIO (Whisper)
-    speech_results = transcribe_video(video_path)
+    video_name = video_id
+    video_path = UPLOAD_DIR / f"{video_name}{extension}"
+    frames_path = FRAMES_DIR / video_name
+    metadata_path = META_DIR / f"{video_name}.json"
 
-    # 🖼️ OCR (frames already extracted)
-    frames = extract_frames(video_path, f"frames/{video_name}")
-    ocr_results = run_ocr_on_frames(frames)
+    try:
+        logger.info("STEP 1: Receiving video")
 
-    # 💾 SAVE BOTH
-    data = {
-        "speech": speech_results,
-        "ocr": ocr_results
-    }
+        # Save in chunks instead of loading entire video into RAM
+        with open(video_path, "wb") as buffer:
+            shutil.copyfileobj(
+                file.file,
+                buffer,
+                length=1024 * 1024
+            )
 
-    import json
-    with open(f"metadata/{video_name}.json", "w") as f:
-        json.dump(data, f, indent=2)
+        logger.info(
+            "STEP 2: Video saved: %s",
+            video_path
+        )
 
-    return {
-        "message": "processed",
-        "video": video_name
-    }
+        logger.info("STEP 3: Starting Whisper")
+
+        speech_results = transcribe_video(str(video_path))
+
+        logger.info(
+            "STEP 4: Whisper completed. Segments: %s",
+            len(speech_results)
+        )
+
+        logger.info("STEP 5: Extracting video frames")
+
+        frames = extract_frames(
+            str(video_path),
+            str(frames_path)
+        )
+
+        logger.info(
+            "STEP 6: Frames extracted: %s",
+            len(frames)
+        )
+
+        logger.info("STEP 7: Starting EasyOCR")
+
+        ocr_results = run_ocr_on_frames(frames)
+
+        logger.info(
+            "STEP 8: OCR completed. Results: %s",
+            len(ocr_results)
+        )
+
+        data = {
+            "speech": speech_results,
+            "ocr": ocr_results
+        }
+
+        with open(
+            metadata_path,
+            "w",
+            encoding="utf-8"
+        ) as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+
+        logger.info("STEP 9: Processing completed")
+
+        return {
+            "message": "processed",
+            "video": video_name,
+            "speech_segments": len(speech_results),
+            "ocr_results": len(ocr_results)
+        }
+
+    except Exception:
+        logger.exception("VIDEO PROCESSING FAILED")
+        raise HTTPException(
+            status_code=500,
+            detail="Video processing failed. Check Render logs."
+        )
+
+    finally:
+        file.file.close()
+
+
 @app.get("/search/")
 def search(query: str):
 
-    import os
-    import json
-
     results = []
 
-    for file in os.listdir("metadata"):
+    for metadata_file in META_DIR.glob("*.json"):
 
-        if file.endswith(".json"):
+        video_name = metadata_file.stem
 
-            video_name = file.replace(
-                ".json",
-                ""
-            )
+        with open(
+            metadata_file,
+            "r",
+            encoding="utf-8"
+        ) as f:
+            data = json.load(f)
 
-            path = f"metadata/{file}"
+        for speech in data.get("speech", []):
 
-            with open(
-                path,
-                "r",
-                encoding="utf-8"
-            ) as f:
-                data = json.load(f)
+            if query.lower() in speech.get("text", "").lower():
 
-            # 🎧 SEARCH SPEECH
-            for speech in data.get(
-                "speech",
-                []
-            ):
+                results.append({
+                    "video": video_name,
+                    "timestamp": speech.get("timestamp", 0),
+                    "text": speech.get("text", ""),
+                    "source": "speech"
+                })
 
-                if query.lower() in speech.get(
-                    "text",
-                    ""
-                ).lower():
+        for ocr in data.get("ocr", []):
 
-                    results.append({
-                        "video":
-                            video_name,
+            if query.lower() in ocr.get("text", "").lower():
 
-                       "timestamp": speech.get(
-    "timestamp",
-    speech.get("start", 0)
-),
-
-                        "text":
-                            speech.get(
-                                "text",
-                                ""
-                            ),
-
-                        "source":
-                            "speech"
-                    })
-
-            # 🖼️ SEARCH OCR
-            for ocr in data.get(
-                "ocr",
-                []
-            ):
-
-                if query.lower() in ocr.get(
-                    "text",
-                    ""
-                ).lower():
-
-                    results.append({
-                        "video":
-                            video_name,
-
-                        "timestamp":
-                            ocr.get(
-                                "timestamp",
-                                0
-                            ),
-
-                        "text":
-                            ocr.get(
-                                "text",
-                                ""
-                            ),
-
-                        "source":
-                            "ocr"
-                    })
+                results.append({
+                    "video": video_name,
+                    "timestamp": ocr.get("timestamp", 0),
+                    "text": ocr.get("text", ""),
+                    "source": "ocr"
+                })
 
     return {
         "query": query,

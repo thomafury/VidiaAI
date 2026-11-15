@@ -1,44 +1,62 @@
+
+import cv2
+import os
+
+
 def extract_frames(video_path, output_folder):
-    import cv2
-    import os
 
     os.makedirs(output_folder, exist_ok=True)
 
     cap = cv2.VideoCapture(video_path)
 
+    if not cap.isOpened():
+        raise RuntimeError("Could not open video")
+
     fps = cap.get(cv2.CAP_PROP_FPS)
-    if fps == 0:
-        fps = 25
 
-    # ✅ CHANGE HERE: 5 second gap
-    frame_interval = int(fps * 5)
+    if fps <= 0:
+        cap.release()
+        raise RuntimeError("Invalid video FPS")
 
-    count = 0
-    saved = 0
+    duration = (
+        cap.get(cv2.CAP_PROP_FRAME_COUNT) / fps
+    )
 
     frames = []
 
-    while True:
+    timestamp = 0
+
+    while timestamp < duration:
+
+        cap.set(
+            cv2.CAP_PROP_POS_MSEC,
+            timestamp * 1000
+        )
+
         success, frame = cap.read()
+
         if not success:
             break
 
-        if count % frame_interval == 0:
-            timestamp = count / fps
+        filename = os.path.join(
+            output_folder,
+            f"frame_{int(timestamp)}.jpg"
+        )
 
-            filename = f"{output_folder}/frame_{int(timestamp)}.jpg"
-            cv2.imwrite(filename, frame)
+        cv2.imwrite(filename, frame)
 
-            frames.append({
-                "file": filename,
-                "timestamp": timestamp
-            })
+        frames.append({
+            "file": filename,
+            "timestamp": timestamp
+        })
 
-            saved += 1
-
-        count += 1
+        timestamp += 5
 
     cap.release()
 
-    print(f"Saved {saved} frames (5s interval)")
+    print(
+        f"Extracted {len(frames)} frames",
+        flush=True
+    )
+
     return frames
