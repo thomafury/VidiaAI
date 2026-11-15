@@ -1,5 +1,5 @@
 fastapi
-fasterwhisper
+faster-whisper
 uvicorn[standard]
 python-multipart
 supabase==2.34.1
