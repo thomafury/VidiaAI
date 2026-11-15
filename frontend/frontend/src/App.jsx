@@ -154,15 +154,14 @@ const API_URL = (
           <div style={styles.searchSection}>
             <div style={styles.searchWrapper}>
               <span style={styles.searchIcon}>🔎</span>
-              <input
-                type="text"
-                color="black"
-                placeholder="Search for moments... e.g., 'person talking about AI'"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                style={styles.searchInput}
-                onKeyDown={(e) => e.key === "Enter" && searchKeyword()}
-              />
+             <input
+  type="text"
+  placeholder="Search for moments... e.g., 'person talking about AI'"
+  value={query}
+  onChange={(e) => setQuery(e.target.value)}
+  style={{ ...styles.searchInput, color: "black" }}
+  onKeyDown={(e) => e.key === "Enter" && searchKeyword()}
+/>
             </div>
             <button onClick={searchKeyword} style={styles.searchButton}>
               <span style={styles.searchBtnIcon}>⚡</span> Search
