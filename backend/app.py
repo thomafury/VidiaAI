@@ -3,13 +3,10 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 import shutil
-import os
 import json
 import uuid
 import logging
 
-from extract_frames import extract_frames
-from ocr import run_ocr_on_frames
 from speech_processor import transcribe_video
 
 logging.basicConfig(level=logging.INFO)
@@ -29,11 +26,12 @@ app.add_middleware(
 )
 
 UPLOAD_DIR = Path("uploads")
-FRAMES_DIR = Path("frames")
 META_DIR = Path("metadata")
 
-for directory in [UPLOAD_DIR, FRAMES_DIR, META_DIR]:
-    directory.mkdir(parents=True, exist_ok=True)
+UPLOAD_DIR.mkdir(exist_ok=True)
+META_DIR.mkdir(exist_ok=True)
+
+MAX_UPLOAD_SIZE = 50 * 1024 * 1024
 
 
 @app.get("/")
@@ -53,6 +51,7 @@ def health():
 def upload_video(file: UploadFile = File(...)):
 
     video_id = str(uuid.uuid4())
+
     extension = Path(file.filename or "video.mp4").suffix.lower()
 
     if extension not in [".mp4", ".mov", ".avi", ".mkv", ".webm"]:
@@ -61,80 +60,66 @@ def upload_video(file: UploadFile = File(...)):
             detail="Unsupported video format"
         )
 
-    video_name = video_id
-    video_path = UPLOAD_DIR / f"{video_name}{extension}"
-    frames_path = FRAMES_DIR / video_name
-    metadata_path = META_DIR / f"{video_name}.json"
+    video_path = UPLOAD_DIR / f"{video_id}{extension}"
+    metadata_path = META_DIR / f"{video_id}.json"
 
     try:
         logger.info("STEP 1: Receiving video")
 
-        # Save in chunks instead of loading entire video into RAM
+        total_size = 0
+
         with open(video_path, "wb") as buffer:
-            shutil.copyfileobj(
-                file.file,
-                buffer,
-                length=1024 * 1024
-            )
 
-        logger.info(
-            "STEP 2: Video saved: %s",
-            video_path
-        )
+            while True:
+                chunk = file.file.read(1024 * 1024)
 
-        logger.info("STEP 3: Starting Whisper")
+                if not chunk:
+                    break
+
+                total_size += len(chunk)
+
+                if total_size > MAX_UPLOAD_SIZE:
+                    raise HTTPException(
+                        status_code=413,
+                        detail="Video exceeds 50 MB limit"
+                    )
+
+                buffer.write(chunk)
+
+        logger.info("STEP 2: Video saved: %s", video_path)
+
+        logger.info("STEP 3: Starting Faster Whisper")
 
         speech_results = transcribe_video(str(video_path))
 
         logger.info(
-            "STEP 4: Whisper completed. Segments: %s",
+            "STEP 4: Transcription completed: %s segments",
             len(speech_results)
-        )
-
-        logger.info("STEP 5: Extracting video frames")
-
-        frames = extract_frames(
-            str(video_path),
-            str(frames_path)
-        )
-
-        logger.info(
-            "STEP 6: Frames extracted: %s",
-            len(frames)
-        )
-
-        logger.info("STEP 7: Starting EasyOCR")
-
-        ocr_results = run_ocr_on_frames(frames)
-
-        logger.info(
-            "STEP 8: OCR completed. Results: %s",
-            len(ocr_results)
         )
 
         data = {
             "speech": speech_results,
-            "ocr": ocr_results
+            "ocr": []
         }
 
-        with open(
-            metadata_path,
-            "w",
-            encoding="utf-8"
-        ) as f:
+        with open(metadata_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
 
-        logger.info("STEP 9: Processing completed")
+        logger.info("STEP 5: Metadata saved")
 
         return {
             "message": "processed",
-            "video": video_name,
+            "video": video_id,
             "speech_segments": len(speech_results),
-            "ocr_results": len(ocr_results)
+            "ocr_results": 0
         }
+
+    except HTTPException:
+        raise
 
     except Exception:
         logger.exception("VIDEO PROCESSING FAILED")
+
         raise HTTPException(
             status_code=500,
             detail="Video processing failed. Check Render logs."
@@ -151,14 +136,10 @@ def search(query: str):
 
     for metadata_file in META_DIR.glob("*.json"):
 
-        video_name = metadata_file.stem
-
-        with open(
-            metadata_file,
-            "r",
-            encoding="utf-8"
-        ) as f:
+        with open(metadata_file, "r", encoding="utf-8") as f:
             data = json.load(f)
+
+        video_name = metadata_file.stem
 
         for speech in data.get("speech", []):
 
@@ -169,17 +150,6 @@ def search(query: str):
                     "timestamp": speech.get("timestamp", 0),
                     "text": speech.get("text", ""),
                     "source": "speech"
-                })
-
-        for ocr in data.get("ocr", []):
-
-            if query.lower() in ocr.get("text", "").lower():
-
-                results.append({
-                    "video": video_name,
-                    "timestamp": ocr.get("timestamp", 0),
-                    "text": ocr.get("text", ""),
-                    "source": "ocr"
                 })
 
     return {
