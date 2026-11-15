@@ -11,8 +11,11 @@ from speech_processor import transcribe_video
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=[
+        "http://localhost:5173",
+        "https://your-vercel-domain.vercel.app",
+    ],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -97,11 +100,10 @@ def search(query: str):
                         "video":
                             video_name,
 
-                        "timestamp":
-                            speech.get(
-                                "start",
-                                0
-                            ),
+                       "timestamp": speech.get(
+    "timestamp",
+    speech.get("start", 0)
+),
 
                         "text":
                             speech.get(

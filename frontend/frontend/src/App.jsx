@@ -10,7 +10,9 @@ function App() {
   const [fileName, setFileName] = useState("");
 
   const videoRef = useRef(null);
-
+const API_URL = (
+  import.meta.env.VITE_API_URL || "http://127.0.0.1:8000"
+).replace(/\/$/, "");
   const uploadVideo = async () => {
     if (!file) {
       alert("Choose a video first");
@@ -24,9 +26,9 @@ function App() {
 
     try {
       const response = await axios.post(
-        "http://127.0.0.1:8000/upload/",
-        formData
-      );
+  `${API_URL}/upload/`,
+  formData
+);
 
       console.log(response.data);
 
@@ -47,7 +49,7 @@ function App() {
 
     try {
       const response = await axios.get(
-        `http://127.0.0.1:8000/search/?query=${query}`
+        `${API_URL}/search/?query=${query}`
       );
 
       setResults(response.data.results);
@@ -154,11 +156,12 @@ function App() {
               <span style={styles.searchIcon}>🔎</span>
               <input
                 type="text"
+                color="black"
                 placeholder="Search for moments... e.g., 'person talking about AI'"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 style={styles.searchInput}
-                onKeyPress={(e) => e.key === "Enter" && searchKeyword()}
+                onKeyDown={(e) => e.key === "Enter" && searchKeyword()}
               />
             </div>
             <button onClick={searchKeyword} style={styles.searchButton}>
