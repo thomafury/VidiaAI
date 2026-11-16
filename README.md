@@ -9,8 +9,8 @@ Instead of manually watching hours of footage, users can upload videos, process 
 ## 🚀 Live Demo
 
 - **Frontend:** https://vidiaai-frontend.onrender.com
-- **Backend API:** https://vidiaai.onrender.com
-- **API Documentation:** https://vidiaai.onrender.com/docs
+- **Backend API:** https://vidiaai-1.onrender.com
+- **API Documentation:** https://vidiaai-1.onrender.com/docs
 
 *Note: Availability and processing performance depend on the hosting provider's free-tier resources.*
 
