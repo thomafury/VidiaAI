@@ -1,64 +1,73 @@
 
-import easyocr
-import gc
+import logging
+import pytesseract
+from pathlib import Path
 
-reader = None
-
-
-def get_ocr_reader():
-    global reader
-
-    if reader is None:
-        print("Loading EasyOCR model...", flush=True)
-
-        reader = easyocr.Reader(
-            ['en'],
-            gpu=False,
-            verbose=False
-        )
-
-        print("EasyOCR loaded successfully!", flush=True)
-
-    return reader
+logger = logging.getLogger("vidiaai")
 
 
 def run_ocr_on_frames(frames_data):
-    global reader
+    """
+    Extract text from video frames using Tesseract OCR.
+
+    Input:
+        [
+            {"file": "path/to/frame.jpg", "timestamp": 5.0}
+        ]
+
+    Output:
+        [
+            {"timestamp": 5.0, "text": "Recognized text"}
+        ]
+    """
 
     results = []
 
-    try:
-        ocr_reader = get_ocr_reader()
+    logger.info("Starting Tesseract OCR on %s frames", len(frames_data))
 
-        for index, item in enumerate(frames_data):
-            print(
-                f"OCR processing frame {index + 1}/{len(frames_data)}",
-                flush=True
+    for index, item in enumerate(frames_data):
+        frame_path = Path(item["file"])
+
+        if not frame_path.exists():
+            logger.warning("Frame not found: %s", frame_path)
+            continue
+
+        try:
+            logger.info(
+                "OCR processing frame %s/%s",
+                index + 1,
+                len(frames_data)
             )
 
-            text_list = ocr_reader.readtext(
-                item["file"],
-                detail=0
+            extracted_text = pytesseract.image_to_string(
+                str(frame_path),
+                lang="eng",
+                config="--oem 1 --psm 6",
+                timeout=15
             )
 
-            extracted_text = " ".join(text_list).strip()
+            extracted_text = " ".join(extracted_text.split())
 
             if extracted_text:
                 results.append({
-                    "timestamp": round(item["timestamp"], 2),
+                    "timestamp": round(float(item["timestamp"]), 2),
                     "text": extracted_text
                 })
 
-        print(
-            f"OCR completed: {len(results)} text segments",
-            flush=True
-        )
+        except RuntimeError as error:
+            logger.warning(
+                "OCR timeout for frame %s: %s",
+                frame_path,
+                error
+            )
 
-        return results
+        except Exception:
+            logger.exception("OCR failed for frame: %s", frame_path)
 
-    finally:
-        # Release the EasyOCR model before loading Whisper
-        reader = None
-        gc.collect()
+    logger.info(
+        "Tesseract OCR completed: %s text segments from %s frames",
+        len(results),
+        len(frames_data)
+    )
 
-        print("EasyOCR model released", flush=True)
+    return results
