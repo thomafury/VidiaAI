@@ -1,220 +1,274 @@
-# 🎥 VidIA AI – Intelligent Video Analysis & Search Platform
+# 🎥 VidiaAI – Intelligent Video Analysis & Search Platform
 
-## Overview
+**Turn videos into searchable knowledge using AI.**
 
-VidIA AI is an AI-powered video intelligence platform that transforms videos into searchable knowledge. It automatically extracts spoken content and on-screen text, allowing users to search videos using keywords and instantly find the relevant timestamps.
+VidiaAI is an AI-powered video intelligence platform that transforms video content into searchable information. It extracts spoken dialogue and on-screen text, stores the extracted content with timestamps, and allows users to search videos to find relevant moments instantly.
 
-Instead of manually watching hours of footage, users can upload a video, let the AI process it, and search for specific words or phrases to jump directly to the relevant moments.
+Instead of manually watching hours of footage, users can upload videos, process them through AI-powered pipelines, and search for specific words or phrases.
 
----
+## 🚀 Live Demo
 
-## Key Features
+- **Frontend:** https://vidiaai-frontend.onrender.com
+- **Backend API:** https://vidiaai.onrender.com
+- **API Documentation:** https://vidiaai.onrender.com/docs
+
+*Note: Availability and processing performance depend on the hosting provider's free-tier resources.*
+
+## ✨ Key Features
 
 ### 📤 Video Upload
-
-* Upload videos through a simple web interface.
-* Backend automatically stores and processes uploaded files.
+- Upload videos through a React web interface.
+- Supported formats: MP4, MOV, AVI, MKV and WebM.
+- Application-level maximum upload size: 50 MB.
+- Video files are stored in Supabase Storage.
+- Backend validates uploaded file types and size.
 
 ### 🎙️ Speech-to-Text Transcription
+- Uses Faster Whisper for speech recognition.
+- Uses the tiny model with INT8 quantization to reduce resource requirements.
+- Generates timestamped speech segments.
+- Uses Voice Activity Detection (VAD) to filter non-speech portions.
+- Makes spoken dialogue searchable.
 
-* Uses OpenAI Whisper to convert spoken audio into text.
-* Preserves timestamps for every speech segment.
-* Enables searching through spoken dialogue.
-
-### 📝 OCR (Optical Character Recognition)
-
-* Extracts frames from uploaded videos.
-* Detects and reads visible text using EasyOCR.
-* Associates detected text with timestamps.
+### 📝 Optical Character Recognition (OCR)
+- Uses Tesseract OCR to extract visible text from video frames.
+- OpenCV handles frame extraction and image preprocessing.
+- Extracts frames at configurable intervals.
+- Associates detected text with timestamps.
+- Stores OCR output for keyword searching.
 
 ### 🔍 Intelligent Video Search
 
-* Search across:
+Search across:
+- Spoken dialogue.
+- Text displayed inside videos.
 
-  * Spoken words
-  * On-screen text
-* Returns:
+Search results contain:
+- Video ID.
+- Timestamp.
+- Matching text.
+- Content source (OCR or transcript).
 
-  * Video name
-  * Timestamp
-  * Matching text
-  * Source (Speech or OCR)
+### 🎬 Video Playback
+- Retrieve stored videos using Supabase signed URLs.
+- Associate search results with their original video.
+- Use timestamps to locate relevant content in the video player.
 
-### 💾 Metadata Generation
+### 💾 Database and Storage
+- Supabase Storage for video files.
+- Supabase PostgreSQL for video metadata and extracted segments.
+- Temporary local files are cleaned up after processing.
 
-* Automatically generates structured JSON metadata for every processed video.
-* Stores speech transcripts and OCR results for fast retrieval.
-
-### 🌐 Full-Stack Web Application
-
-* React frontend for uploading videos and searching content.
-* FastAPI backend for AI processing and search APIs.
-
----
-
-# How It Works
+## 🏗️ System Architecture
 
 ```text
-                    Upload Video
-                          │
-                          ▼
+                  React Frontend
+                       |
+                       v
                   FastAPI Backend
-                          │
-        ┌─────────────────┴─────────────────┐
-        │                                   │
-        ▼                                   ▼
- Speech-to-Text (Whisper)          Frame Extraction
-        │                                   │
-        ▼                                   ▼
- Speech Transcript                  OCR (EasyOCR)
-        │                                   │
-        └──────────────┬────────────────────┘
-                       ▼
-               Metadata Generation
-                       ▼
-                 Keyword Search API
-                       ▼
-         Matching Video + Timestamp
+                       |
+             Video Upload & Validation
+                       |
+                       v
+                 Supabase Storage
+                       |
+                       v
+                Video Processing
+                       |
+              +--------+--------+
+              |                 |
+              v                 v
+         OpenCV Frames     Audio Processing
+              |                 |
+              v                 v
+         Tesseract OCR     Faster Whisper
+              |                 |
+              v                 v
+          OCR Text         Transcripts
+              |                 |
+              +--------+--------+
+                       |
+                       v
+               Supabase PostgreSQL
+                       |
+                       v
+                 Search API
+                       |
+                       v
+             Search Results + Timestamps
+                       |
+                       v
+                Video Playback
 ```
 
----
+## 🛠️ Technology Stack
 
-# Technology Stack
+| Layer | Technologies |
+|---|---|
+| Frontend | React, JavaScript, HTML5, CSS |
+| Backend | Python, FastAPI |
+| Computer Vision | OpenCV, Tesseract OCR |
+| Speech Recognition | Faster Whisper |
+| Model Optimization | INT8 quantization, VAD |
+| Database | Supabase PostgreSQL |
+| Object Storage | Supabase Storage |
+| Deployment | Render, Docker |
+| API | REST API |
 
-## Frontend
+## ⚡ Resource Optimization for Free-Tier Deployment
 
-* React
-* JavaScript
-* HTML5
-* CSS
+One of the main engineering challenges was deploying an AI-powered video processing application within the memory and CPU limitations of a free cloud hosting environment.
 
-## Backend
+The Render free instance used for this project provides approximately **512 MB RAM**. Running OCR and speech recognition models without optimisation can exceed the available resources or result in request timeouts.
 
-* FastAPI
-* Python
+Several optimisations were introduced.
 
-## AI & Computer Vision
+### 1. OCR Optimization
 
-* OpenAI Whisper
-* EasyOCR
-* OpenCV
+**Initial implementation:** EasyOCR, which relies on PyTorch and introduces substantial memory overhead.
 
-## Data Storage
+**Optimised implementation:** Tesseract OCR.
 
-* JSON Metadata
+Additional optimisations:
+- Frame extraction interval increased from 5 seconds to 10 seconds.
+- Maximum frame dimension reduced from 1280 px to 640 px.
+- Frames converted to grayscale.
+- JPEG quality set to 75.
+- Temporary frame files deleted after processing.
 
----
+These changes reduce the number and size of images processed by the OCR pipeline.
 
-# Example Workflow
+### 2. Speech Recognition Optimization
 
-1. Upload a video.
-2. VidIA AI extracts audio and video frames.
-3. Speech is transcribed using Whisper.
-4. Text appearing in video frames is extracted using EasyOCR.
-5. Metadata is generated automatically.
-6. Search for any keyword.
-7. Instantly receive the matching timestamp and video segment.
+The speech recognition pipeline uses Faster Whisper with:
+- Tiny model variant.
+- INT8 quantization.
+- Voice Activity Detection (VAD).
 
----
+These settings reduce model memory requirements and processing overhead compared with larger model configurations.
 
-# Example Search Result
+### 3. Upload and Storage Optimization
 
-Search:
+- Application-level upload limit: 50 MB.
+- Incoming uploads are read in 1 MB chunks into temporary local files.
+- Video files are stored in Supabase Storage.
+- Temporary video and frame files are removed after processing.
+- Python garbage collection is used to help release unused objects.
 
-```text
-"Artificial Intelligence"
-```
+**Important:** Chunked file reading reduces the need to read the entire incoming upload into memory at once. It does not make the entire pipeline fully streaming, since subsequent storage and processing stages may still use memory.
 
-Output:
+### 4. Database Optimization
+
+OCR and speech segments use a shared database structure rather than separate tables.
+
+The `video_segments` table contains:
+
+| Column | Purpose |
+|---|---|
+| `id` | Segment identifier |
+| `video_id` | Associated video |
+| `content` | Extracted OCR or transcript text |
+| `start_time` | Segment start timestamp |
+| `end_time` | Segment end timestamp |
+| `content_type` | Identifies OCR or transcript content |
+
+The `content_type` field distinguishes between OCR and speech transcription.
+
+### 5. Deployment Constraints and Current Limitations
+
+The current deployment is a resource-constrained prototype.
+
+- Maximum application upload size is 50 MB.
+- Actual processing capacity depends on video duration, resolution, CPU usage and available RAM.
+- Processing both OCR and transcription can cause request timeouts.
+- Long videos may exceed the available processing time.
+- The 50 MB upload limit does not guarantee successful processing of every video under that size.
+- Background job processing and independent OCR/transcription tasks are planned improvements.
+
+These optimisations demonstrate practical experience adapting AI workloads to limited cloud infrastructure.
+
+## 🔄 Example Workflow
+
+1. User uploads a video.
+2. Backend validates the file and stores it temporarily.
+3. OpenCV extracts video frames.
+4. Tesseract extracts visible text.
+5. Faster Whisper processes audio and generates transcripts.
+6. Extracted segments are stored in Supabase PostgreSQL.
+7. User searches for a keyword.
+8. Backend returns matching video segments and timestamps.
+9. The application retrieves the video from Supabase Storage.
+
+## 🔎 Example Search Result
+
+**Search query:** Artificial Intelligence
+
+**Example output:**
 
 ```text
 Video: AI_Tutorial.mp4
 
 Timestamp: 03:42
 
-Source: Speech
+Source: Transcript
 
-Text:
-"...artificial intelligence is transforming modern software..."
+Matching text:
+"...artificial intelligence is transforming
+modern software..."
 ```
 
----
+## 💡 Potential Use Cases
 
-# Potential Use Cases
+- **Content Creators:** Find specific moments in long recordings and locate clips for editing.
+- **YouTubers:** Search previously uploaded content for quotes and topics.
+- **Education:** Find explanations and important concepts in lecture recordings.
+- **Businesses:** Search training videos and recorded meetings.
+- **Journalists:** Locate statements in interviews and archived footage.
+- **Sports Analysis:** Search commentary and event recordings.
 
-### 🎬 Content Creators
+## 🔮 Future Improvements
 
-* Quickly locate specific moments in long recordings.
-* Find clips for YouTube Shorts, Instagram Reels and TikTok.
-* Reuse old content without manually reviewing every video.
+- Semantic search using sentence embeddings.
+- ChromaDB integration for vector search.
+- Retrieval-Augmented Generation (RAG).
+- AI-generated video summaries.
+- Object detection and scene understanding.
+- Multilingual speech recognition and search.
+- Background processing with job queues.
+- Independent OCR and transcription processing modes.
+- Processing status tracking.
+- Multi-user authentication and project management.
+- Improved support for long videos through scalable worker infrastructure.
 
-### 📺 YouTubers
 
-* Search hundreds of uploaded videos for specific topics.
-* Locate memorable quotes or scenes within seconds.
-* Speed up video editing workflows.
 
-### 🎓 Educators & Students
+VidiaAI/
+│
+├── backend/
+│   ├── app.py
+│   ├── extract_frames.py
+│   ├── ocr.py
+│   ├── speech_processor.py
+│   ├── requirements.txt
+│   └── Dockerfile
+│
+├── frontend/
+│   ├── src/
+│   ├── public/
+│   └── package.json
+│
+├── README.md
+└── .gitignore
 
-* Search lecture recordings for important concepts.
-* Jump directly to explanations without rewatching entire classes.
 
-### 🏢 Businesses
 
-* Search training videos for policies or procedures.
-* Find discussions from recorded meetings.
-* Build searchable internal video knowledge bases.
 
-### 📰 Journalists & Researchers
-
-* Search interviews and archived footage.
-* Locate exact moments where people mention specific topics.
-
-### ⚽ Sports & Event Analysis
-
-* Search commentary and event recordings.
-* Retrieve important highlights and timestamps.
-
----
-
-# Future Improvements
-
-* Semantic search using vector embeddings.
-* ChromaDB integration for Retrieval-Augmented Generation (RAG).
-* AI-generated video summaries.
-* Object detection and scene understanding.
-* Face recognition and speaker identification.
-* Cloud deployment with Docker.
-* Multi-user authentication and project management.
-* Video player with automatic timestamp navigation.
-* Support for additional languages and multilingual search.
-
----
-
-# Project Status
-
-✅ Video Upload
-
-✅ Speech Transcription
-
-✅ OCR Extraction
-
-✅ Metadata Generation
-
-✅ Keyword Search
-
-🚧 Semantic Search
-
-🚧 Cloud Deployment
-
-🚧 Docker Support
-
----
-
-# Author
+## 👨‍💻 Author
 
 **Thomas PJ**
 
+MSc Data Science, AI & Digital Business  
 Frontend Developer | AI & Machine Learning Engineer
 
-Passionate about building intelligent applications that combine modern web technologies with Artificial Intelligence to solve real-world problems.
+Interested in building practical AI applications combining machine learning, computer vision, NLP and modern full-stack technologies.
+
