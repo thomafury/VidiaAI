@@ -10,110 +10,137 @@ function App() {
   const [fileName, setFileName] = useState("");
 
   const videoRef = useRef(null);
-const API_URL =
-  import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+  const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+
   const uploadVideo = async () => {
     if (!file) {
       alert("Choose a video first");
       return;
     }
-
     const formData = new FormData();
     formData.append("file", file);
-
     setLoading(true);
-
     try {
-      const response = await axios.post(
-  `${API_URL}/upload/`,
-  formData
-);
-
+      const response = await axios.post(`${API_URL}/upload/`, formData);
       console.log(response.data);
-
       alert("Video uploaded successfully");
-
       setVideoUrl(URL.createObjectURL(file));
       setFileName(file.name);
     } catch (error) {
       console.error(error);
       alert("Upload failed");
     }
-
     setLoading(false);
   };
 
   const searchKeyword = async () => {
     if (!query) return;
-
     try {
-      const response = await axios.get(
-        `${API_URL}/search/?query=${query}`
-      );
-
+      const response = await axios.get(`${API_URL}/search/?query=${query}`);
       setResults(response.data.results);
     } catch (error) {
       console.error(error);
     }
   };
 
-  const jumpToTimestamp = (timestamp) => {
-    if (videoRef.current) {
-      videoRef.current.currentTime = timestamp;
-      videoRef.current.play();
+  const jumpToTimestamp = async (item) => {
+  console.log("RESULT CARD CLICKED:", item);
+
+  try {
+    const videoId = item.video_id || item.video;
+    const timestamp = Number(item.timestamp ?? item.start_time ?? 0);
+
+    console.log("Video ID:", videoId);
+    console.log("Timestamp:", timestamp);
+
+    if (!videoId) {
+      console.error("No video ID found in this search result:", item);
+      return;
     }
-  };
+
+    const videoElement = videoRef.current;
+
+    if (!videoElement) {
+      console.error("Video player is not mounted!");
+      return;
+    }
+
+    // Load the selected video from your FastAPI backend
+    if (videoElement.dataset.videoId !== String(videoId)) {
+      const videoUrl = `${API_URL}/videos/${videoId}`;
+
+      console.log("Requesting video:", videoUrl);
+
+      videoElement.dataset.videoId = String(videoId);
+      videoElement.src = videoUrl;
+
+      await new Promise((resolve, reject) => {
+        videoElement.onloadedmetadata = resolve;
+        videoElement.onerror = () => {
+          reject(new Error("Video could not be loaded"));
+        };
+
+        videoElement.load();
+      });
+
+      console.log("Video metadata loaded");
+    }
+
+    videoElement.currentTime = timestamp;
+
+    await videoElement.play();
+
+    console.log("Playing from:", timestamp);
+
+  } catch (error) {
+    console.error("Video playback failed:", error);
+  }
+};
 
   return (
     <div style={styles.app}>
-      {/* Background decorative elements */}
-      <div style={styles.bgBlob1}></div>
-      <div style={styles.bgBlob2}></div>
-      <div style={styles.bgBlob3}></div>
-
       <div style={styles.container}>
         {/* Header */}
         <header style={styles.header}>
           <div style={styles.logoWrapper}>
-            <span style={styles.logoIcon}>🎬</span>
-            <h1 style={styles.title}>
-              <span style={styles.titleGradient}>Vidia</span> AI
-            </h1>
+            <div style={styles.logoMark}>V</div>
+            <div style={styles.titleBlock}>
+              <h1 style={styles.title}>
+                Vidia<span style={styles.titleAccent}>AI</span>
+              </h1>
+              <p style={styles.subtitle}>
+                Semantic video search engine
+              </p>
+            </div>
           </div>
-          <p style={styles.subtitle}>
-            Next-generation semantic video search • Find moments instantly
-          </p>
         </header>
 
         {/* Upload Section */}
         <div style={styles.card}>
           <div style={styles.cardHeader}>
-            <span style={styles.cardIcon}>📤</span>
             <h2 style={styles.cardTitle}>Upload Video</h2>
+            <span style={styles.cardHint}>MP4, AVI, MOV · Max 500MB</span>
           </div>
           <div style={styles.uploadSection}>
-            <div style={styles.fileInputWrapper}>
-              <label style={styles.fileLabel}>
-                <input
-                  type="file"
-                  accept="video/*"
-                  onChange={(e) => {
-                    setFile(e.target.files[0]);
-                    if (e.target.files[0]) {
-                      setFileName(e.target.files[0].name);
-                    }
-                  }}
-                  style={styles.fileInput}
-                />
-                <div style={styles.fileDropZone}>
-                  <span style={styles.dropIcon}>📁</span>
-                  <span style={styles.fileName}>
-                    {fileName || "Drop your video here or click to browse"}
-                  </span>
-                  <span style={styles.fileHint}>MP4, AVI, MOV • Max 500MB</span>
-                </div>
-              </label>
-            </div>
+            <label style={styles.fileLabel}>
+              <input
+                type="file"
+                accept="video/*"
+                onChange={(e) => {
+                  setFile(e.target.files[0]);
+                  if (e.target.files[0]) {
+                    setFileName(e.target.files[0].name);
+                  }
+                }}
+                style={styles.fileInput}
+              />
+              <div style={styles.fileDropZone}>
+                <span style={styles.dropIcon}>↑</span>
+                <span style={styles.fileName}>
+                  {fileName || "Drop your video here or click to browse"}
+                </span>
+              </div>
+            </label>
 
             <button
               onClick={uploadVideo}
@@ -125,10 +152,10 @@ const API_URL =
             >
               {loading ? (
                 <span style={styles.loadingSpinner}>
-                  <span style={styles.spinner}></span> Processing...
+                  <span style={styles.spinner}></span> Processing
                 </span>
               ) : (
-                "🚀 Upload & Process"
+                "Upload & Process"
               )}
             </button>
           </div>
@@ -147,23 +174,20 @@ const API_URL =
         {/* Search Section */}
         <div style={styles.card}>
           <div style={styles.cardHeader}>
-            <span style={styles.cardIcon}>🔍</span>
             <h2 style={styles.cardTitle}>Search Video</h2>
+            <span style={styles.cardHint}>Natural language queries</span>
           </div>
           <div style={styles.searchSection}>
-            <div style={styles.searchWrapper}>
-              <span style={styles.searchIcon}>🔎</span>
-             <input
-  type="text"
-  placeholder="Search for moments... e.g., 'person talking about AI'"
-  value={query}
-  onChange={(e) => setQuery(e.target.value)}
-  style={{ ...styles.searchInput, color: "black" }}
-  onKeyDown={(e) => e.key === "Enter" && searchKeyword()}
-/>
-            </div>
+            <input
+              type="text"
+              placeholder="e.g., 'person talking about AI'"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              style={styles.searchInput}
+              onKeyDown={(e) => e.key === "Enter" && searchKeyword()}
+            />
             <button onClick={searchKeyword} style={styles.searchButton}>
-              <span style={styles.searchBtnIcon}>⚡</span> Search
+              Search
             </button>
           </div>
         </div>
@@ -171,23 +195,19 @@ const API_URL =
         {/* Results Section */}
         <div style={styles.resultsSection}>
           <div style={styles.resultsHeader}>
-            <div style={styles.resultsTitleWrapper}>
-              <span style={styles.resultsIcon}>📋</span>
-              <h2 style={styles.resultsTitle}>Search Results</h2>
-            </div>
+            <h2 style={styles.resultsTitle}>Search Results</h2>
             {results.length > 0 && (
-              <span style={styles.resultCount}>{results.length} moments found</span>
+              <span style={styles.resultCount}>
+                {results.length} {results.length === 1 ? "moment" : "moments"}
+              </span>
             )}
           </div>
 
           {results.length === 0 && !loading && (
             <div style={styles.emptyState}>
-              <span style={styles.emptyIcon}>🎯</span>
               <p style={styles.emptyTitle}>No results yet</p>
               <p style={styles.emptyText}>
                 Upload a video and search for specific moments using natural language.
-                <br />
-                Try searching for objects, actions, or spoken words.
               </p>
             </div>
           )}
@@ -196,26 +216,24 @@ const API_URL =
             {results.map((item, index) => (
               <div
                 key={index}
-                onClick={() => jumpToTimestamp(item.timestamp)}
+                onClick={() => jumpToTimestamp(item)}
                 style={styles.resultCard}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.background = "#f8f7ff";
-                  e.currentTarget.style.borderColor = "#7c5cfc";
-                  e.currentTarget.style.transform = "translateX(8px)";
+                  e.currentTarget.style.background = "#111318";
+                  e.currentTarget.style.borderColor = "#2a2e37";
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.background = "#ffffff";
-                  e.currentTarget.style.borderColor = "#e5e7eb";
-                  e.currentTarget.style.transform = "translateX(0px)";
+                  e.currentTarget.style.background = "#0b0d10";
+                  e.currentTarget.style.borderColor = "#1f232b";
                 }}
               >
                 <div style={styles.resultHeader}>
                   <div style={styles.resultBadges}>
                     <span style={styles.timestampBadge}>
-                      ⏱️ {item.timestamp}s
+                      {item.timestamp}s
                     </span>
                     <span style={styles.sourceBadge}>
-                      📹 {item.source || "Uploaded Video"}
+                      {item.source || "Uploaded Video"}
                     </span>
                   </div>
                   <span style={styles.resultIndex}>#{index + 1}</span>
@@ -224,12 +242,10 @@ const API_URL =
                   {item.text || "No description available"}
                 </p>
                 {item.video && (
-                  <p style={styles.resultVideo}>🎥 File: {item.video}</p>
+                  <p style={styles.resultVideo}>File: {item.video}</p>
                 )}
                 <div style={styles.resultAction}>
-                  <span style={styles.jumpHint}>
-                    ▶ Click to jump to this moment
-                  </span>
+                  <span  onClick={() => jumpToTimestamp(item)} style={styles.jumpHint}>Click to jump to moment</span>
                   <span style={styles.playIcon}>▶</span>
                 </div>
               </div>
@@ -238,12 +254,12 @@ const API_URL =
         </div>
 
         {/* Video Player */}
-        {videoUrl && (
+        (
           <div style={styles.videoSection}>
             <div style={styles.videoCard}>
               <div style={styles.videoHeader}>
                 <div style={styles.videoTitleWrapper}>
-                  <span style={styles.videoIcon}>▶️</span>
+                  <span style={styles.videoDot}></span>
                   <h3 style={styles.videoTitle}>Now Playing</h3>
                 </div>
                 <button
@@ -258,21 +274,20 @@ const API_URL =
               </div>
               <div style={styles.videoWrapper}>
                 <video
-                  ref={videoRef}
-                  width="100%"
-                  controls
-                  style={styles.videoPlayer}
-                >
-                  <source src={videoUrl} type="video/mp4" />
-                </video>
+  ref={videoRef}
+  width="100%"
+  controls
+  style={styles.videoPlayer}
+/>
+                  
               </div>
               <div style={styles.videoFooter}>
-                <span style={styles.videoFileName}>📄 {fileName}</span>
-                <span style={styles.videoStatus}>● Ready</span>
+                <span style={styles.videoFileName}>{fileName}</span>
+                <span style={styles.videoStatus}>Ready</span>
               </div>
             </div>
           </div>
-        )}
+        
       </div>
     </div>
   );
@@ -281,143 +296,118 @@ const API_URL =
 const styles = {
   app: {
     minHeight: "100vh",
-    background: "linear-gradient(135deg, #f5f3ff 0%, #ede9fe 50%, #e0e7ff 100%)",
-    padding: "20px",
-    fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
-    position: "relative",
-    overflowX: "hidden",
-  },
-
-  bgBlob1: {
-    position: "fixed",
-    top: "-200px",
-    right: "-200px",
-    width: "500px",
-    height: "500px",
-    background: "radial-gradient(circle, rgba(124, 92, 252, 0.08) 0%, transparent 70%)",
-    borderRadius: "50%",
-    pointerEvents: "none",
-    zIndex: 0,
-  },
-
-  bgBlob2: {
-    position: "fixed",
-    bottom: "-150px",
-    left: "-150px",
-    width: "400px",
-    height: "400px",
-    background: "radial-gradient(circle, rgba(236, 72, 153, 0.06) 0%, transparent 70%)",
-    borderRadius: "50%",
-    pointerEvents: "none",
-    zIndex: 0,
-  },
-
-  bgBlob3: {
-    position: "fixed",
-    top: "50%",
-    left: "50%",
-    width: "600px",
-    height: "600px",
-    background: "radial-gradient(circle, rgba(96, 165, 250, 0.04) 0%, transparent 70%)",
-    borderRadius: "50%",
-    transform: "translate(-50%, -50%)",
-    pointerEvents: "none",
-    zIndex: 0,
+    width: "100%",
+    background: "#050607",
+    padding: "40px 20px",
+    fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    boxSizing: "border-box",
   },
 
   container: {
-    maxWidth: "1000px",
+    maxWidth: "860px",
     margin: "0 auto",
-    position: "relative",
-    zIndex: 1,
   },
 
+  /* HEADER */
   header: {
-    textAlign: "center",
     marginBottom: "40px",
-    padding: "20px 0",
+    paddingBottom: "28px",
+    borderBottom: "1px solid #14171c",
   },
 
   logoWrapper: {
     display: "flex",
     alignItems: "center",
-    justifyContent: "center",
-    gap: "12px",
-    marginBottom: "12px",
+    gap: "14px",
   },
 
-  logoIcon: {
-    fontSize: "2.8rem",
+  logoMark: {
+    width: "40px",
+    height: "40px",
+    borderRadius: "8px",
+    background: "#ffffff",
+    color: "#050607",
+    fontSize: "1.3rem",
+    fontWeight: "800",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    letterSpacing: "-0.03em",
+  },
+
+  titleBlock: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "2px",
   },
 
   title: {
-    fontSize: "3.2rem",
-    fontWeight: "800",
-    letterSpacing: "-0.03em",
+    fontSize: "1.5rem",
+    fontWeight: "700",
+    letterSpacing: "-0.02em",
     margin: 0,
+    color: "#ffffff",
+    lineHeight: 1.1,
   },
 
-  titleGradient: {
-    background: "linear-gradient(135deg, #7c5cfc 0%, #ec4899 100%)",
-    WebkitBackgroundClip: "text",
-    WebkitTextFillColor: "transparent",
-    backgroundClip: "text",
+  titleAccent: {
+    color: "#6b7280",
+    fontWeight: "400",
+    marginLeft: "2px",
   },
 
   subtitle: {
     color: "#6b7280",
-    fontSize: "1.1rem",
+    fontSize: "0.8rem",
     fontWeight: "400",
-    margin: "8px 0 0 0",
-    letterSpacing: "0.3px",
+    margin: 0,
+    letterSpacing: "0.02em",
   },
 
+  /* CARDS */
   card: {
-    background: "rgba(255, 255, 255, 0.85)",
-    backdropFilter: "blur(20px)",
-    WebkitBackdropFilter: "blur(20px)",
-    borderRadius: "20px",
-    padding: "28px 32px",
-    marginBottom: "20px",
-    boxShadow: "0 8px 32px rgba(124, 92, 252, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04)",
-    border: "1px solid rgba(255, 255, 255, 0.7)",
-    transition: "all 0.3s ease",
+    background: "#0b0d10",
+    borderRadius: "10px",
+    padding: "20px 24px",
+    marginBottom: "12px",
+    border: "1px solid #1f232b",
   },
 
   cardHeader: {
     display: "flex",
-    alignItems: "center",
-    gap: "10px",
-    marginBottom: "18px",
-  },
-
-  cardIcon: {
-    fontSize: "1.4rem",
+    justifyContent: "space-between",
+    alignItems: "baseline",
+    marginBottom: "16px",
   },
 
   cardTitle: {
-    fontSize: "1.2rem",
+    fontSize: "0.85rem",
     fontWeight: "600",
-    color: "#1f2937",
+    color: "#e5e7eb",
     margin: 0,
+    letterSpacing: "0.02em",
+    textTransform: "uppercase",
   },
 
+  cardHint: {
+    color: "#4b5563",
+    fontSize: "0.75rem",
+    fontWeight: "400",
+  },
+
+  /* UPLOAD */
   uploadSection: {
     display: "flex",
-    gap: "16px",
-    alignItems: "center",
+    gap: "10px",
+    alignItems: "stretch",
     flexWrap: "wrap",
-  },
-
-  fileInputWrapper: {
-    flex: 1,
-    minWidth: "200px",
   },
 
   fileLabel: {
     display: "block",
     cursor: "pointer",
-    width: "100%",
+    flex: 1,
+    minWidth: "200px",
   },
 
   fileInput: {
@@ -425,94 +415,85 @@ const styles = {
   },
 
   fileDropZone: {
-    border: "2px dashed #d1d5db",
-    borderRadius: "12px",
-    padding: "20px",
-    textAlign: "center",
-    transition: "all 0.3s ease",
-    background: "rgba(255, 255, 255, 0.5)",
+    border: "1px dashed #2a2e37",
+    borderRadius: "8px",
+    padding: "16px",
+    display: "flex",
+    alignItems: "center",
+    gap: "12px",
+    transition: "border-color 0.2s, background 0.2s",
+    background: "#050607",
     cursor: "pointer",
-  },
-
-  fileDropZoneHover: {
-    borderColor: "#7c5cfc",
-    background: "rgba(124, 92, 252, 0.05)",
+    height: "100%",
+    boxSizing: "border-box",
   },
 
   dropIcon: {
-    display: "block",
-    fontSize: "2rem",
-    marginBottom: "8px",
+    width: "28px",
+    height: "28px",
+    borderRadius: "6px",
+    background: "#14171c",
+    color: "#9ca3af",
+    fontSize: "1rem",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
   },
 
   fileName: {
-    display: "block",
-    color: "#374151",
-    fontSize: "0.95rem",
-    fontWeight: "500",
-    marginBottom: "4px",
-  },
-
-  fileHint: {
-    display: "block",
     color: "#9ca3af",
-    fontSize: "0.8rem",
+    fontSize: "0.85rem",
+    fontWeight: "400",
   },
 
   primaryButton: {
-    background: "linear-gradient(135deg, #7c5cfc 0%, #6366f1 100%)",
-    color: "#fff",
+    background: "#ffffff",
+    color: "#050607",
     border: "none",
-    padding: "14px 32px",
-    borderRadius: "12px",
-    fontSize: "1rem",
+    padding: "0 24px",
+    borderRadius: "8px",
+    fontSize: "0.85rem",
     fontWeight: "600",
     cursor: "pointer",
-    transition: "all 0.3s ease",
-    boxShadow: "0 4px 16px rgba(124, 92, 252, 0.3)",
+    transition: "background 0.2s, opacity 0.2s",
     whiteSpace: "nowrap",
-    minWidth: "180px",
-  },
-
-  primaryButtonHover: {
-    transform: "translateY(-2px)",
-    boxShadow: "0 8px 24px rgba(124, 92, 252, 0.4)",
+    minHeight: "56px",
   },
 
   primaryButtonDisabled: {
-    opacity: 0.7,
+    opacity: 0.5,
     cursor: "not-allowed",
-    transform: "none !important",
   },
 
   loadingSpinner: {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    gap: "10px",
+    gap: "8px",
   },
 
   spinner: {
-    width: "18px",
-    height: "18px",
-    border: "3px solid rgba(255, 255, 255, 0.3)",
-    borderTop: "3px solid #ffffff",
+    width: "14px",
+    height: "14px",
+    border: "2px solid rgba(5, 6, 7, 0.2)",
+    borderTop: "2px solid #050607",
     borderRadius: "50%",
     animation: "spin 0.8s linear infinite",
   },
 
   loadingBar: {
-    marginTop: "16px",
+    marginTop: "14px",
     padding: "12px 16px",
-    background: "rgba(243, 244, 246, 0.8)",
-    borderRadius: "12px",
-    border: "1px solid #e5e7eb",
+    background: "#050607",
+    borderRadius: "8px",
+    border: "1px solid #1f232b",
   },
 
   loadingProgress: {
-    height: "4px",
-    background: "linear-gradient(90deg, #7c5cfc 0%, #ec4899 100%)",
-    borderRadius: "4px",
+    height: "2px",
+    background: "#ffffff",
+    borderRadius: "2px",
     animation: "progress 2s ease-in-out infinite",
     width: "0%",
   },
@@ -525,140 +506,103 @@ const styles = {
 
   loadingText: {
     color: "#6b7280",
-    fontSize: "0.85rem",
+    fontSize: "0.75rem",
     margin: 0,
   },
 
   loadingPercent: {
-    color: "#7c5cfc",
-    fontSize: "0.85rem",
+    color: "#e5e7eb",
+    fontSize: "0.75rem",
     fontWeight: "600",
     margin: 0,
   },
 
+  /* SEARCH */
   searchSection: {
     display: "flex",
-    gap: "12px",
-    alignItems: "center",
-  },
-
-  searchWrapper: {
-    flex: 1,
-    position: "relative",
-    display: "flex",
-    alignItems: "center",
-  },
-
-  searchIcon: {
-    position: "absolute",
-    left: "14px",
-    fontSize: "1.1rem",
-    color: "#9ca3af",
+    gap: "10px",
+    alignItems: "stretch",
   },
 
   searchInput: {
     flex: 1,
-    padding: "14px 20px 14px 44px",
-    border: "2px solid #e5e7eb",
-    borderRadius: "12px",
-    fontSize: "0.95rem",
-    transition: "all 0.3s ease",
+    padding: "12px 16px",
+    border: "1px solid #2a2e37",
+    borderRadius: "8px",
+    fontSize: "0.9rem",
+    transition: "border-color 0.2s",
     outline: "none",
-    background: "rgba(255, 255, 255, 0.8)",
+    background: "#050607",
+    color: "#ffffff",
     width: "100%",
-  },
-
-  searchInputFocus: {
-    borderColor: "#7c5cfc",
-    boxShadow: "0 0 0 4px rgba(124, 92, 252, 0.1)",
+    boxSizing: "border-box",
+    minHeight: "44px",
   },
 
   searchButton: {
-    background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
-    color: "#fff",
-    border: "none",
-    padding: "14px 28px",
-    borderRadius: "12px",
-    fontSize: "0.95rem",
+    background: "#14171c",
+    color: "#ffffff",
+    border: "1px solid #2a2e37",
+    padding: "0 24px",
+    borderRadius: "8px",
+    fontSize: "0.85rem",
     fontWeight: "600",
     cursor: "pointer",
-    transition: "all 0.3s ease",
-    boxShadow: "0 4px 16px rgba(16, 185, 129, 0.3)",
+    transition: "background 0.2s, border-color 0.2s",
     whiteSpace: "nowrap",
-    display: "flex",
-    alignItems: "center",
-    gap: "8px",
+    minHeight: "44px",
   },
 
-  searchBtnIcon: {
-    fontSize: "1.1rem",
-  },
-
+  /* RESULTS */
   resultsSection: {
-    background: "rgba(255, 255, 255, 0.85)",
-    backdropFilter: "blur(20px)",
-    WebkitBackdropFilter: "blur(20px)",
-    borderRadius: "20px",
-    padding: "28px 32px",
-    boxShadow: "0 8px 32px rgba(124, 92, 252, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04)",
-    border: "1px solid rgba(255, 255, 255, 0.7)",
-    marginBottom: "20px",
+    background: "#0b0d10",
+    borderRadius: "10px",
+    padding: "20px 24px",
+    border: "1px solid #1f232b",
+    marginBottom: "12px",
   },
 
   resultsHeader: {
     display: "flex",
     justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: "20px",
-  },
-
-  resultsTitleWrapper: {
-    display: "flex",
-    alignItems: "center",
-    gap: "10px",
-  },
-
-  resultsIcon: {
-    fontSize: "1.4rem",
+    alignItems: "baseline",
+    marginBottom: "16px",
   },
 
   resultsTitle: {
-    fontSize: "1.2rem",
+    fontSize: "0.85rem",
     fontWeight: "600",
-    color: "#1f2937",
+    color: "#e5e7eb",
     margin: 0,
+    letterSpacing: "0.02em",
+    textTransform: "uppercase",
   },
 
   resultCount: {
-    background: "linear-gradient(135deg, #7c5cfc 0%, #6366f1 100%)",
-    color: "#fff",
-    padding: "6px 16px",
-    borderRadius: "20px",
-    fontSize: "0.85rem",
-    fontWeight: "600",
+    background: "#14171c",
+    color: "#9ca3af",
+    padding: "3px 10px",
+    borderRadius: "12px",
+    fontSize: "0.75rem",
+    fontWeight: "500",
+    border: "1px solid #2a2e37",
   },
 
   emptyState: {
     textAlign: "center",
-    padding: "60px 20px",
-  },
-
-  emptyIcon: {
-    fontSize: "4rem",
-    display: "block",
-    marginBottom: "16px",
+    padding: "40px 20px",
   },
 
   emptyTitle: {
-    fontSize: "1.3rem",
+    fontSize: "0.95rem",
     fontWeight: "600",
-    color: "#374151",
-    margin: "0 0 8px 0",
+    color: "#6b7280",
+    margin: "0 0 6px 0",
   },
 
   emptyText: {
-    color: "#9ca3af",
-    fontSize: "0.95rem",
+    color: "#4b5563",
+    fontSize: "0.85rem",
     margin: 0,
     lineHeight: "1.6",
   },
@@ -666,67 +610,70 @@ const styles = {
   resultsList: {
     display: "flex",
     flexDirection: "column",
-    gap: "12px",
+    gap: "8px",
   },
 
   resultCard: {
-    padding: "20px 24px",
-    border: "1px solid #e5e7eb",
-    borderRadius: "14px",
+    padding: "16px 20px",
+    border: "1px solid #1f232b",
+    borderRadius: "8px",
     cursor: "pointer",
-    transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-    background: "#ffffff",
-    position: "relative",
+    transition: "border-color 0.2s, background 0.2s",
+    background: "#0b0d10",
   },
 
   resultHeader: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: "12px",
+    marginBottom: "10px",
   },
 
   resultBadges: {
     display: "flex",
-    gap: "10px",
+    gap: "8px",
     flexWrap: "wrap",
   },
 
   timestampBadge: {
-    background: "linear-gradient(135deg, #dbeafe 0%, #e0e7ff 100%)",
-    color: "#4338ca",
-    padding: "4px 14px",
-    borderRadius: "20px",
-    fontSize: "0.8rem",
+    background: "#14171c",
+    color: "#e5e7eb",
+    padding: "3px 10px",
+    borderRadius: "6px",
+    fontSize: "0.7rem",
     fontWeight: "600",
+    fontFamily: "monospace",
+    border: "1px solid #2a2e37",
   },
 
   sourceBadge: {
-    background: "linear-gradient(135deg, #f3e8ff 0%, #ede9fe 100%)",
-    color: "#6b21a5",
-    padding: "4px 14px",
-    borderRadius: "20px",
-    fontSize: "0.8rem",
-    fontWeight: "600",
+    background: "#14171c",
+    color: "#9ca3af",
+    padding: "3px 10px",
+    borderRadius: "6px",
+    fontSize: "0.7rem",
+    fontWeight: "500",
+    border: "1px solid #2a2e37",
   },
 
   resultIndex: {
-    color: "#9ca3af",
-    fontSize: "0.75rem",
+    color: "#4b5563",
+    fontSize: "0.7rem",
     fontWeight: "500",
+    fontFamily: "monospace",
   },
 
   resultText: {
-    color: "#1f2937",
-    fontSize: "0.95rem",
-    margin: "0 0 6px 0",
-    lineHeight: "1.5",
+    color: "#d1d5db",
+    fontSize: "0.88rem",
+    margin: "0 0 4px 0",
+    lineHeight: "1.55",
   },
 
   resultVideo: {
     color: "#6b7280",
-    fontSize: "0.85rem",
-    margin: "0 0 10px 0",
+    fontSize: "0.78rem",
+    margin: "0 0 8px 0",
   },
 
   resultAction: {
@@ -735,33 +682,30 @@ const styles = {
     alignItems: "center",
     marginTop: "10px",
     paddingTop: "10px",
-    borderTop: "1px solid #f3f4f6",
+    borderTop: "1px solid #14171c",
   },
 
   jumpHint: {
-    color: "#7c5cfc",
-    fontSize: "0.8rem",
+    color: "#6b7280",
+    fontSize: "0.72rem",
     fontWeight: "500",
   },
 
   playIcon: {
-    color: "#7c5cfc",
-    fontSize: "1rem",
-    fontWeight: "700",
+    color: "#e5e7eb",
+    fontSize: "0.7rem",
   },
 
+  /* VIDEO */
   videoSection: {
-    marginTop: "4px",
+    marginTop: "12px",
   },
 
   videoCard: {
-    background: "rgba(255, 255, 255, 0.85)",
-    backdropFilter: "blur(20px)",
-    WebkitBackdropFilter: "blur(20px)",
-    borderRadius: "20px",
-    padding: "24px",
-    boxShadow: "0 8px 32px rgba(124, 92, 252, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04)",
-    border: "1px solid rgba(255, 255, 255, 0.7)",
+    background: "#0b0d10",
+    borderRadius: "10px",
+    padding: "20px 24px",
+    border: "1px solid #1f232b",
   },
 
   videoHeader: {
@@ -774,46 +718,48 @@ const styles = {
   videoTitleWrapper: {
     display: "flex",
     alignItems: "center",
-    gap: "10px",
+    gap: "8px",
   },
 
-  videoIcon: {
-    fontSize: "1.3rem",
+  videoDot: {
+    width: "6px",
+    height: "6px",
+    borderRadius: "50%",
+    background: "#10b981",
+    boxShadow: "0 0 8px rgba(16, 185, 129, 0.6)",
   },
 
   videoTitle: {
-    fontSize: "1.1rem",
+    fontSize: "0.85rem",
     fontWeight: "600",
-    color: "#1f2937",
+    color: "#e5e7eb",
     margin: 0,
+    letterSpacing: "0.02em",
+    textTransform: "uppercase",
   },
 
   closeButton: {
-    background: "rgba(0, 0, 0, 0.05)",
-    border: "none",
-    width: "32px",
-    height: "32px",
-    borderRadius: "50%",
-    fontSize: "1rem",
+    background: "#14171c",
+    border: "1px solid #2a2e37",
+    width: "28px",
+    height: "28px",
+    borderRadius: "6px",
+    fontSize: "0.75rem",
     cursor: "pointer",
-    transition: "all 0.2s ease",
-    color: "#6b7280",
+    transition: "background 0.2s, border-color 0.2s",
+    color: "#9ca3af",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
   },
 
-  closeButtonHover: {
-    background: "rgba(0, 0, 0, 0.1)",
-    transform: "rotate(90deg)",
-  },
-
   videoWrapper: {
-    borderRadius: "12px",
+    borderRadius: "8px",
     overflow: "hidden",
     background: "#000",
     position: "relative",
     aspectRatio: "16/9",
+    border: "1px solid #14171c",
   },
 
   videoPlayer: {
@@ -833,82 +779,81 @@ const styles = {
 
   videoFileName: {
     color: "#6b7280",
-    fontSize: "0.85rem",
+    fontSize: "0.78rem",
+    fontFamily: "monospace",
   },
 
   videoStatus: {
     color: "#10b981",
-    fontSize: "0.8rem",
-    fontWeight: "500",
+    fontSize: "0.72rem",
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: "0.05em",
   },
 };
 
-// Add keyframes to document
+/* global styles injected once */
 const styleTag = document.createElement("style");
 styleTag.textContent = `
   @keyframes spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
   }
-  
   @keyframes progress {
     0% { width: 0%; }
     50% { width: 70%; }
     100% { width: 100%; }
   }
-  
-  /* Smooth scrollbar */
-  ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #050607;
+    color-scheme: dark;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
-  
-  ::-webkit-scrollbar-track {
-    background: rgba(0, 0, 0, 0.05);
-    border-radius: 10px;
+  ::selection {
+    background: #ffffff;
+    color: #050607;
   }
-  
-  ::-webkit-scrollbar-thumb {
-    background: linear-gradient(135deg, #7c5cfc 0%, #6366f1 100%);
-    border-radius: 10px;
-  }
-  
-  ::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-  }
-  
-  /* Focus styles */
   input:focus {
-    border-color: #7c5cfc !important;
-    box-shadow: 0 0 0 4px rgba(124, 92, 252, 0.1) !important;
+    border-color: #4b5563 !important;
   }
-  
-  /* Button hover */
   button:hover {
-    transform: translateY(-2px);
+    opacity: 0.9;
   }
-  
   button:active {
     transform: scale(0.98);
   }
-  
-  /* File drop zone hover */
-  .file-drop-zone:hover {
-    border-color: #7c5cfc;
-    background: rgba(124, 92, 252, 0.05);
+  label:hover > div {
+    border-color: #4b5563;
+    background: #0b0d10;
   }
-  
-  /* Responsive */
   @media (max-width: 640px) {
     .upload-section,
     .search-section {
       flex-direction: column;
     }
-    
     .primary-button,
     .search-button {
       width: 100%;
+      min-height: 48px;
     }
+  }
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #050607;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #1f232b;
+    border-radius: 10px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #2a2e37;
   }
 `;
 document.head.appendChild(styleTag);

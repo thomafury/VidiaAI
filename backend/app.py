@@ -308,8 +308,11 @@ def get_video(video_id: str):
         signed_url = signed["signedURL"]
 
         if signed_url.startswith("/"):
-            signed_url = SUPABASE_URL.rstrip("/") + signed_url
-
+         signed_url = (
+        SUPABASE_URL.rstrip("/")
+        + "/storage/v1"
+        + signed_url
+    )
         return RedirectResponse(url=signed_url)
 
     except HTTPException:
