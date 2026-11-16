@@ -89,58 +89,53 @@ const [processingMessage, setProcessingMessage] = useState("");
     }
   };
 
-  const jumpToTimestamp = async (item) => {
-  console.log("RESULT CARD CLICKED:", item);
-
+  const jumpToTimestamp = async (result) => {
   try {
-    const videoId = item.video_id || item.video;
-    const timestamp = Number(item.timestamp ?? item.start_time ?? 0);
+        console.log("RESULT CARD CLICKED:", result);
 
-    console.log("Video ID:", videoId);
-    console.log("Timestamp:", timestamp);
+        const videoId = result.video;
+        const timestamp = Number(result.timestamp || 0);
 
-    if (!videoId) {
-      console.error("No video ID found in this search result:", item);
-      return;
-    }
+        const response = await fetch(
+            `${API_URL}/videos/${videoId}`
+        );
 
-    const videoElement = videoRef.current;
+        if (!response.ok) {
+            throw new Error("Failed to retrieve video URL");
+        }
 
-    if (!videoElement) {
-      console.error("Video player is not mounted!");
-      return;
-    }
+        const data = await response.json();
 
-    // Load the selected video from your FastAPI backend
-    if (videoElement.dataset.videoId !== String(videoId)) {
-      const videoUrl = `${API_URL}/videos/${videoId}`;
+        console.log("SIGNED VIDEO URL:", data.video_url);
 
-      console.log("Requesting video:", videoUrl);
+        if (!data.video_url) {
+            throw new Error("Video URL missing");
+        }
 
-      videoElement.dataset.videoId = String(videoId);
-      videoElement.src = videoUrl;
+        const video = videoRef.current;
 
-      await new Promise((resolve, reject) => {
-        videoElement.onloadedmetadata = resolve;
-        videoElement.onerror = () => {
-          reject(new Error("Video could not be loaded"));
+        if (!video) {
+            throw new Error("Video element not found");
+        }
+
+        video.src = data.video_url;
+        video.load();
+
+        video.onloadedmetadata = () => {
+            video.currentTime = timestamp;
+            video.play().catch(console.error);
         };
 
-        videoElement.load();
-      });
+        video.onerror = () => {
+            console.error("VIDEO ERROR:", {
+                error: video.error,
+                source: video.currentSrc
+            });
+        };
 
-      console.log("Video metadata loaded");
+    } catch (error) {
+        console.error("Video playback failed:", error);
     }
-
-    videoElement.currentTime = timestamp;
-
-    await videoElement.play();
-
-    console.log("Playing from:", timestamp);
-
-  } catch (error) {
-    console.error("Video playback failed:", error);
-  }
 };
 
   return (
