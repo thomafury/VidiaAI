@@ -8,30 +8,76 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [videoUrl, setVideoUrl] = useState(null);
   const [fileName, setFileName] = useState("");
-
+const [processingStage, setProcessingStage] = useState(0);
+const [processingMessage, setProcessingMessage] = useState("");
   const videoRef = useRef(null);
   const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
   const uploadVideo = async () => {
-    if (!file) {
-      alert("Choose a video first");
-      return;
-    }
-    const formData = new FormData();
-    formData.append("file", file);
-    setLoading(true);
-    try {
-      const response = await axios.post(`${API_URL}/upload/`, formData);
-      console.log(response.data);
-      alert("Video uploaded successfully");
-      setVideoUrl(URL.createObjectURL(file));
-      setFileName(file.name);
-    } catch (error) {
-      console.error(error);
-      alert("Upload failed");
-    }
+  if (!file) {
+    alert("Choose a video first");
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  setLoading(true);
+  setProcessingStage(0);
+  setProcessingMessage("Uploading video...");
+
+  const stages = [
+    "Uploading video...",
+    "Starting Whisper AI...",
+    "Transcribing audio...",
+    "Generating searchable segments...",
+    "Saving video and transcript to database..."
+  ];
+
+  let currentStage = 0;
+
+  const stageInterval = setInterval(() => {
+    currentStage = Math.min(
+      currentStage + 1,
+      stages.length - 1
+    );
+
+    setProcessingStage(currentStage);
+    setProcessingMessage(stages[currentStage]);
+
+  }, 4000);
+
+  try {
+    const response = await axios.post(
+      `${API_URL}/upload/`,
+      formData
+    );
+
+    console.log(response.data);
+
+    clearInterval(stageInterval);
+
+    setProcessingStage(5);
+    setProcessingMessage("Video processing completed!");
+
+    setVideoUrl(URL.createObjectURL(file));
+    setFileName(file.name);
+
+    alert("Video uploaded successfully");
+
+  } catch (error) {
+    clearInterval(stageInterval);
+
+    console.error(error);
+
+    setProcessingMessage("Video processing failed");
+
+    alert("Upload failed");
+
+  } finally {
     setLoading(false);
-  };
+  }
+};
 
   const searchKeyword = async () => {
     if (!query) return;
@@ -161,14 +207,56 @@ function App() {
           </div>
 
           {loading && (
-            <div style={styles.loadingBar}>
-              <div style={styles.loadingProgress}></div>
-              <div style={styles.loadingInfo}>
-                <span style={styles.loadingText}>Indexing video content...</span>
-                <span style={styles.loadingPercent}>0%</span>
-              </div>
-            </div>
-          )}
+  <div style={styles.loadingBar}>
+
+    <div style={styles.loadingInfo}>
+      <span style={styles.loadingText}>
+        {processingMessage}
+      </span>
+
+      <span style={styles.loadingPercent}>
+        {processingStage < 5
+          ? `${Math.round(processingStage / 5 * 100)}%`
+          : "100%"}
+      </span>
+    </div>
+
+    <div style={{
+      ...styles.loadingProgress,
+      width: `${processingStage / 5 * 100}%`
+    }} />
+
+    <div style={{ marginTop: "16px" }}>
+      {[
+        "Uploading video",
+        "Starting Whisper AI",
+        "Transcribing audio",
+        "Generating searchable segments",
+        "Saving results"
+      ].map((stage, index) => (
+        <div
+          key={stage}
+          style={{
+            padding: "8px 0",
+            color: index <= processingStage
+              ? "#e5e7eb"
+              : "#4b5563",
+            fontSize: "0.8rem"
+          }}
+        >
+          {index < processingStage
+            ? "✓"
+            : index === processingStage
+              ? "◉"
+              : "○"
+          }{" "}
+          {stage}
+        </div>
+      ))}
+    </div>
+
+  </div>
+)}
         </div>
 
         {/* Search Section */}

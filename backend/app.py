@@ -5,7 +5,11 @@ import uuid
 import logging
 import mimetypes
 from pathlib import Path
+import shutil
+import gc
 
+from extract_frames import extract_frames
+from ocr import run_ocr_on_frames
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
@@ -73,6 +77,7 @@ def health():
     return {"status": "ok"}
 
 
+
 @app.post("/upload/")
 def upload_video(file: UploadFile = File(...)):
 
@@ -90,10 +95,12 @@ def upload_video(file: UploadFile = File(...)):
 
     video_path = UPLOAD_DIR / f"{video_id}{extension}"
     storage_path = f"{video_id}{extension}"
+    frame_folder = UPLOAD_DIR / f"{video_id}_frames"
 
     uploaded_to_storage = False
 
     try:
+        # STEP 1: Receive video
         logger.info("STEP 1: Receiving video")
 
         total_size = 0
@@ -123,18 +130,49 @@ def upload_video(file: UploadFile = File(...)):
 
         logger.info("STEP 2: Video saved temporarily")
 
-        # Transcribe video
-        logger.info("STEP 3: Starting Faster Whisper")
+        # STEP 3: Extract video frames
+        logger.info("STEP 3: Extracting video frames")
+
+        frames = extract_frames(
+            str(video_path),
+            str(frame_folder),
+            interval=5,
+            max_dimension=1280
+        )
+
+        logger.info(
+            "STEP 4: Extracted %s frames",
+            len(frames)
+        )
+
+        # STEP 5: Run OCR
+        logger.info("STEP 5: Starting EasyOCR")
+
+        ocr_results = run_ocr_on_frames(frames)
+
+        logger.info(
+            "STEP 6: OCR completed: %s text segments",
+            len(ocr_results)
+        )
+
+        # Release frame metadata before Whisper
+        del frames
+        gc.collect()
+
+        # STEP 7: Run Faster Whisper
+        logger.info("STEP 7: Starting Faster Whisper")
 
         speech_results = transcribe_video(str(video_path))
 
         logger.info(
-            "STEP 4: Transcription completed: %s segments",
+            "STEP 8: Transcription completed: %s segments",
             len(speech_results)
         )
 
-        # Upload video to Supabase Storage
-        logger.info("STEP 5: Uploading video to Supabase")
+        gc.collect()
+
+        # STEP 9: Upload video to Supabase Storage
+        logger.info("STEP 9: Uploading video to Supabase")
 
         media_type = (
             mimetypes.guess_type(video_path.name)[0]
@@ -152,9 +190,9 @@ def upload_video(file: UploadFile = File(...)):
 
         uploaded_to_storage = True
 
-        logger.info("STEP 6: Video uploaded to Supabase")
+        logger.info("STEP 10: Video uploaded to Supabase")
 
-        # Save video metadata
+        # STEP 11: Save video metadata
         db.table("videos").insert({
             "id": video_id,
             "filename": file.filename or video_path.name,
@@ -165,10 +203,12 @@ def upload_video(file: UploadFile = File(...)):
             }
         }).execute()
 
-        # Save transcript segments
+        # STEP 12: Prepare searchable segments
         segments = []
 
+        # Save Whisper transcript segments
         for speech in speech_results:
+
             timestamp = speech.get(
                 "timestamp",
                 speech.get("start", 0)
@@ -182,19 +222,44 @@ def upload_video(file: UploadFile = File(...)):
                 "content_type": "transcript"
             })
 
+        # Save OCR segments
+        for item in ocr_results:
+
+            text = item.get("text", "").strip()
+
+            if not text:
+                continue
+
+            timestamp = item.get("timestamp", 0)
+
+            segments.append({
+                "video_id": video_id,
+                "content": text,
+                "start_time": timestamp,
+                "end_time": timestamp,
+                "content_type": "ocr"
+            })
+
+        # STEP 13: Insert searchable segments
         if segments:
             db.table("video_segments").insert(
                 segments
             ).execute()
 
-        logger.info("STEP 7: Database records saved")
+        logger.info(
+            "STEP 13: Saved %s searchable segments "
+            "(%s transcript, %s OCR)",
+            len(segments),
+            len(speech_results),
+            len(ocr_results)
+        )
 
         return {
             "message": "processed",
             "video": video_id,
             "filename": file.filename,
             "speech_segments": len(speech_results),
-            "ocr_results": 0,
+            "ocr_results": len(ocr_results),
             "storage": "supabase"
         }
 
@@ -221,8 +286,19 @@ def upload_video(file: UploadFile = File(...)):
     finally:
         file.file.close()
 
+        # Remove temporary video
         if video_path.exists():
             video_path.unlink()
+
+        # Remove extracted frames
+        if frame_folder.exists():
+            shutil.rmtree(
+                frame_folder,
+                ignore_errors=True
+            )
+
+        gc.collect()
+
 
 
 @app.get("/search/")

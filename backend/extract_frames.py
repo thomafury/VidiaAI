@@ -3,8 +3,7 @@ import cv2
 import os
 
 
-def extract_frames(video_path, output_folder):
-
+def extract_frames(video_path, output_folder, interval=5, max_dimension=1280):
     os.makedirs(output_folder, exist_ok=True)
 
     cap = cv2.VideoCapture(video_path)
@@ -13,50 +12,65 @@ def extract_frames(video_path, output_folder):
         raise RuntimeError("Could not open video")
 
     fps = cap.get(cv2.CAP_PROP_FPS)
+    frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
 
-    if fps <= 0:
+    if fps <= 0 or frame_count <= 0:
         cap.release()
-        raise RuntimeError("Invalid video FPS")
+        raise RuntimeError("Invalid video FPS or frame count")
 
-    duration = (
-        cap.get(cv2.CAP_PROP_FRAME_COUNT) / fps
-    )
-
+    duration = frame_count / fps
     frames = []
-
     timestamp = 0
 
-    while timestamp < duration:
+    try:
+        while timestamp < duration:
+            cap.set(cv2.CAP_PROP_POS_MSEC, timestamp * 1000)
 
-        cap.set(
-            cv2.CAP_PROP_POS_MSEC,
-            timestamp * 1000
-        )
+            success, frame = cap.read()
 
-        success, frame = cap.read()
+            if not success:
+                break
 
-        if not success:
-            break
+            height, width = frame.shape[:2]
 
-        filename = os.path.join(
-            output_folder,
-            f"frame_{int(timestamp)}.jpg"
-        )
+            scale = min(
+                1.0,
+                max_dimension / max(width, height)
+            )
 
-        cv2.imwrite(filename, frame)
+            if scale < 1.0:
+                new_width = int(width * scale)
+                new_height = int(height * scale)
 
-        frames.append({
-            "file": filename,
-            "timestamp": timestamp
-        })
+                frame = cv2.resize(
+                    frame,
+                    (new_width, new_height),
+                    interpolation=cv2.INTER_AREA
+                )
 
-        timestamp += 5
+            filename = os.path.join(
+                output_folder,
+                f"frame_{int(timestamp)}.jpg"
+            )
 
-    cap.release()
+            saved = cv2.imwrite(
+                filename,
+                frame,
+                [cv2.IMWRITE_JPEG_QUALITY, 80]
+            )
 
-    print(
-        f"Extracted {len(frames)} frames",
-        flush=True
-    )
+            if saved:
+                frames.append({
+                    "file": filename,
+                    "timestamp": timestamp
+                })
+
+            del frame
+            timestamp += interval
+
+    finally:
+        cap.release()
+
+    print(f"Extracted {len(frames)} frames", flush=True)
 
     return frames
