@@ -22,10 +22,10 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
-       "https://vidiaai-frontend.onrender.com/",
+       "https://vidiaai-frontend.onrender.com",
 
     ],
-    allow_credentials=False,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
